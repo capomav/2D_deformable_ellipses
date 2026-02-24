@@ -11,8 +11,8 @@ import timeit
 import tqdm
 
 # Set the total number of cores to be used(need to match with the job script)
-#set_num_threads(6)
 
+set_num_threads(10)
 #constants 
 phi = 1.0              #packing fraction; 0.005 for 1 particle
 dt = 0.005               #timestep
@@ -47,6 +47,8 @@ deformable = True
 
 dt_relax = 0.01
 relax_steps = 10000
+
+numpy.random.seed(12345)
 
 #initializing
 '''
