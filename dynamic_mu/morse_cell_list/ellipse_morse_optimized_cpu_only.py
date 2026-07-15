@@ -11,18 +11,22 @@ try:
     import tqdm
 except Exception: 
     tqdm = None
+    
+try:
+    import h5py
+except Exception:
+    h5py= None
+
 
 
 @dataclass
 class SimConfig:
     # ---------------- physical / simulation parameters ----------------
-    phi: float = 0.9
-    dt: float = 2.0e-4
-    tot_time: float = 10.0
-    L: float = 190.0
-    v0: float = 0.7
-    D: float = 0.0
-    D_r: float = 0.01
+    phi: float = 1.0
+    dt: float = 1.e-4
+    tot_time: float = 50.0
+    L: float = 30.0
+    v0: float = 1.0
 
     # Morse parameters
     a_mor: float = 2.5
@@ -37,14 +41,23 @@ class SimConfig:
     sigma_0: float = 2.0
     aspect_ratio: float = 1.0
     aspect_ratio_init: float = 1.0
-    tau: float = 10.0
-    mu: float = 2.0
+    tau: float = 1.0
+    mu: float = 0.5
     K: float = 50.0  
+    incom_K:bool = True
+    
+    KT = 0.001
+    zeta_t: float = 1.0
+    zeta_r: float = 4*R_0**2/3 
+    zeta_stress: float = 1.0
+    D: float = KT/zeta_t
+    D_r: float = KT/zeta_r
+    D_str = KT/zeta_stress
 
     deformable: bool = True
     deformable_relax: bool = False
     dt_relax: float = 0.01
-    relax_steps: int = 5000
+    relax_steps: int = 10000
     shape_diff_tol = 1.0e-5
 
     # other parameters
@@ -57,6 +70,7 @@ class SimConfig:
 
     # Output controls
     save_data: bool = True
+    save_hdf5: bool = False
     make_movie: bool = True
     output_prefix: str = "data_ellipses"
     movie_fps: int = 25
@@ -126,7 +140,9 @@ def calculate_force_torque_morse_scalar(rx: float, ry: float, r: float, chi: flo
 
     r2 = r * r
     sigma_arg = 1.0 - 0.5 * chi / r2 * (dots_add * dots_add / chi_add + dots_sub * dots_sub / chi_sub)
-    sigma = sigma_0 * sigma_arg ** (-0.5)
+    #sigma = sigma_0 * sigma_arg ** (-0.5)
+    
+    sigma = sigma_0 * sigma_arg**(-0.5)* ((1+chi) / (1-chi))**(-0.25)
 
     Fx = 0.0
     Fy = 0.0
@@ -145,8 +161,8 @@ def calculate_force_torque_morse_scalar(rx: float, ry: float, r: float, chi: flo
 
         common_du = ( 0.5 * a_mor * D_mor * epsilon * chi * sigma_0 * exp_term * (1.0 - exp_term) * sigma_arg ** (-1.5) )
 
-        du_geom_x = ( 2.0 * dots_add * rx / r / chi_add + dots_add * dots_add * chi * u2x / (chi_add ** 2) + 2.0 * dots_sub * rx / r / chi_sub + dots_sub * dots_sub * chi * u2x / (chi_sub ** 2) )
-        du_geom_y = ( 2.0 * dots_add * ry / r / chi_add + dots_add * dots_add * chi * u2y / (chi_add ** 2) + 2.0 * dots_sub * ry / r / chi_sub + dots_sub * dots_sub * chi * u2y / (chi_sub ** 2) )
+        du_geom_x = ( 2.0 * dots_add * rx / r / chi_add - dots_add * dots_add * chi * u2x / (chi_add ** 2) + 2.0 * dots_sub * rx / r / chi_sub + dots_sub * dots_sub * chi * u2x / (chi_sub ** 2) )
+        du_geom_y = ( 2.0 * dots_add * ry / r / chi_add - dots_add * dots_add * chi * u2y / (chi_add ** 2) + 2.0 * dots_sub * ry / r / chi_sub + dots_sub * dots_sub * chi * u2y / (chi_sub ** 2) )
 
         dUdux = common_du * du_geom_x
         dUduy = common_du * du_geom_y
@@ -169,7 +185,9 @@ def calculate_force_torque_harmonic_scalar(rx: float, ry: float, r: float, chi: 
 
     r2 = r * r
     sigma_arg = 1.0 - 0.5 * chi / r2 * (dots_add * dots_add / chi_add + dots_sub * dots_sub / chi_sub)
-    sigma = sigma_0 * sigma_arg ** (-0.5)
+    #sigma = sigma_0 * sigma_arg ** (-0.5)
+    #New sigma definition 
+    sigma = sigma_0 * sigma_arg**(-0.5)* ((1+chi) / (1-chi))**(-0.25)
 
     Fx = 0.0
     Fy = 0.0
@@ -186,8 +204,8 @@ def calculate_force_torque_harmonic_scalar(rx: float, ry: float, r: float, chi: 
         Fy = common_force * geom_y
 
         common_du = (0.125 * chi * sigma_0 * epsilon * beta * (r - sigma) ** (beta - 1.0) * sigma_arg ** (-1.5))
-        du_geom_x = (2.0 * dots_add * rx / r / chi_add + dots_add * dots_add * chi * u2x / (chi_add ** 2) + 2.0 * dots_sub * rx / r / chi_sub + dots_sub * dots_sub * chi * u2x / (chi_sub ** 2) )
-        du_geom_y = (2.0 * dots_add * ry / r / chi_add + dots_add * dots_add * chi * u2y / (chi_add ** 2) + 2.0 * dots_sub * ry / r / chi_sub + dots_sub * dots_sub * chi * u2y / (chi_sub ** 2) )
+        du_geom_x = (2.0 * dots_add * rx / r2 / chi_add - dots_add * dots_add * chi * u2x / (chi_add ** 2)/r2 + 2.0 * dots_sub * rx / r2 / chi_sub + dots_sub * dots_sub * chi * u2x / (chi_sub ** 2)/r2 )
+        du_geom_y = (2.0 * dots_add * ry / r2 / chi_add - dots_add * dots_add * chi * u2y / (chi_add ** 2)/r2 + 2.0 * dots_sub * ry / r2 / chi_sub + dots_sub * dots_sub * chi * u2y / (chi_sub ** 2)/r2 )
 
         dUdux = common_du * du_geom_x
         dUduy = common_du * du_geom_y
@@ -320,14 +338,15 @@ def compute_forces_harmonic_cell_cpu(
 # State update 
 
 @njit(parallel=True)
-def integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque_mech, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, lmda_major_0: float, lmda_minor_0: float, deformable: bool,
-    dt_step: float, L: float, v0: float, D: float, D_r: float, R_0: float, tau: float, mu: float, shape_diff_tol:float, ):
+def integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque_mech, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, noise_sxx, noise_syy, lmda_major_0: float, lmda_minor_0: float, deformable: bool,
+    dt_step: float, L: float, v0: float, D: float, D_r: float, D_str:float, zeta_t:float, zeta_r:float, R_0: float, tau: float, mu: float, K:float, incom_K: bool, shape_diff_tol:float, ):
     
     n = x.shape[0]
     tol = shape_diff_tol #1.0e-5
     sqrt_2Ddt = math.sqrt(2.0 * D * dt_step)
     sqrt_2Drdt = math.sqrt(2.0 * D_r * dt_step)
-
+    sqrt_2Dstrdt = math.sqrt(2.0*D_str* dt_step)
+    
     for i in prange(n):
         th = theta[i]
         si = math.sin(th)
@@ -351,12 +370,29 @@ def integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torqu
             tr = L00 + L11
             det = L00 * L11 - L01 * L10
             delta_lmda = math.sqrt(tr * tr - 4.0 * det) / tr
-            mu_dynamic = mu * (1.0 + 50.0 * delta_lmda * delta_lmda)
+            mu_dynamic = mu * (1.0 + 0.0 * delta_lmda * delta_lmda)
+            
+            # Adding noise to stresses component wise
+            
+            sxx[i] += sqrt_2Dstrdt * noise_sxx[i]
+            syy[i] += sqrt_2Dstrdt * noise_syy[i]
 
-            dL00 = -(L00 - L00_0) / tau + R_0 / (4.0 * tau * mu_dynamic) * (sxx[i] - syy[i])
-            dL11 = -(L11 - L11_0) / tau + R_0 / (4.0 * tau * mu_dynamic) * (syy[i] - sxx[i])
-            dL01 = -(L01 - L01_0) / tau + R_0 / (2.0 * tau * mu_dynamic) * sxy[i]
-            dL10 = -(L10 - L10_0) / tau + R_0 / (2.0 * tau * mu_dynamic) * syx[i]
+            #dL00 = -(L00 - L00_0) / tau + R_0 / (4.0 * tau * mu_dynamic) * (sxx[i] - syy[i])
+            #dL11 = -(L11 - L11_0) / tau + R_0 / (4.0 * tau * mu_dynamic) * (syy[i] - sxx[i])
+            #dL01 = -(L01 - L01_0) / tau + R_0 / (2.0 * tau * mu_dynamic) * sxy[i]
+            #dL10 = -(L10 - L10_0) / tau + R_0 / (2.0 * tau * mu_dynamic) * syx[i]
+            
+            if(incom_K):
+
+                dL00 = -(L00 - L00_0) / tau + R_0 / (4.0 * tau * mu_dynamic) * (sxx[i] - syy[i])
+                dL11 = -(L11 - L11_0) / tau + R_0 / (4.0 * tau * mu_dynamic) * (syy[i] - sxx[i])
+                dL01 = -(L01 - L01_0) / tau + R_0 / (2.0 * tau * mu_dynamic) * sxy[i]
+                dL10 = -(L10 - L10_0) / tau + R_0 / (2.0 * tau * mu_dynamic) * syx[i]
+            else:
+                dL00 = -(L00 - L00_0) / tau + R_0 / (4.0 * tau * mu_dynamic * K) * ((mu_dynamic + K) * sxx[i] - (mu_dynamic - K) * syy[i])
+                dL11 = -(L11 - L11_0) / tau + R_0 / (4.0 * tau * mu_dynamic * K) * ((mu_dynamic + K) * syy[i] - (mu_dynamic - K) * sxx[i])
+                dL01 = -(L01 - L01_0) / tau + R_0 / (2.0 * tau * mu_dynamic) * sxy[i]
+                dL10 = -(L10 - L10_0) / tau + R_0 / (2.0 * tau * mu_dynamic) * syx[i]
 
             L00 += dL00 * dt_step
             L11 += dL11 * dt_step
@@ -386,10 +422,10 @@ def integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torqu
             theta_def = 0.5 * math.atan2(2.0 * L01, Ldiff)
             theta_def = theta_def - math.pi * np.rint((theta_def - th) / math.pi)
 
-            th += torque_mech[i] * dt_step + (theta_def - th) + sqrt_2Drdt * noise_theta[i]
+            th += (1/zeta_r)*torque_mech[i] * dt_step + (1/zeta_r)*(theta_def - th) + sqrt_2Drdt * noise_theta[i]
             th = wrap_position(th, 2.0 * math.pi)
         else:
-            th += torque_mech[i] * dt_step + sqrt_2Drdt * noise_theta[i]
+            th += (1/zeta_r)*torque_mech[i] * dt_step + sqrt_2Drdt * noise_theta[i]
             th = wrap_position(th, 2.0 * math.pi)
 
         si = math.sin(th)
@@ -405,8 +441,8 @@ def integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torqu
         lmda_minor[i] = lmin
         theta[i] = th
 
-        x[i] = wrap_position(x[i] + (v0 * co + Fx[i]) * dt_step + sqrt_2Ddt * noise_x[i], L)
-        y[i] = wrap_position(y[i] + (v0 * si + Fy[i]) * dt_step + sqrt_2Ddt * noise_y[i], L)
+        x[i] = wrap_position(x[i] + (1/zeta_t)*(v0 * co + Fx[i]) * dt_step + sqrt_2Ddt * noise_x[i], L)
+        y[i] = wrap_position(y[i] + (1/zeta_t)*(v0 * si + Fy[i]) * dt_step + sqrt_2Ddt * noise_y[i], L)
 
 
 # helper functions
@@ -422,8 +458,10 @@ def derived_lengths(cfg: SimConfig):
     sigma_side = cfg.R_0 / math.sqrt(cfg.aspect_ratio)
     lmda_major_0 = sigma_edge
     lmda_minor_0 = sigma_side
-    lmda_major_init = lmda_major_0 * cfg.aspect_ratio_init
-    lmda_minor_init = lmda_minor_0
+    lmda_major_init = cfg.R_0 * math.sqrt(cfg.aspect_ratio_init)
+    lmda_minor_init = cfg.R_0 / math.sqrt(cfg.aspect_ratio_init)
+    #lmda_major_init = lmda_major_0 #* cfg.aspect_ratio_init
+    #lmda_minor_init = lmda_minor_0
     return lmda_major_0, lmda_minor_0, lmda_major_init, lmda_minor_init
 
 
@@ -546,9 +584,11 @@ def run_simulation(cfg: SimConfig = CONFIG):
         compute_forces_cpu("harmonic", cfg, x, y, theta, lmda_major, lmda_minor, cell_head, cell_next, n_cells, cutoff, Fx, Fy, torque, sxx, sxy, syx, syy, cos_theta, sin_theta, )
         noise_x = rng.normal(0.0, 1.0, N)
         noise_y = rng.normal(0.0, 1.0, N)
+        noise_sxx = rng.normal(0.0, 1.0, N)
+        noise_syy = rng.normal(0.0, 1.0, N)
         noise_theta = rng.normal(0.0, 1.0, N)
-        integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, lmda_major_0, lmda_minor_0, cfg.deformable_relax,
-            cfg.dt_relax, cfg.L, cfg.v0, cfg.D, cfg.D_r, cfg.R_0, cfg.tau, cfg.mu, cfg.shape_diff_tol,)
+        integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, noise_sxx, noise_syy, lmda_major_0, lmda_minor_0, cfg.deformable_relax,
+            cfg.dt_relax, cfg.L, cfg.v0, cfg.D, cfg.D_r, cfg.D_str, cfg.zeta_t, cfg.zeta_r, cfg.R_0, cfg.tau, cfg.mu, cfg.K, cfg.incom_K, cfg.shape_diff_tol,)
 
     save_idx = 0
     for t in _progress(range(steps), "run"):
@@ -557,8 +597,8 @@ def run_simulation(cfg: SimConfig = CONFIG):
         noise_x = rng.normal(0.0, 1.0, N)
         noise_y = rng.normal(0.0, 1.0, N)
         noise_theta = rng.normal(0.0, 1.0, N)
-        integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, lmda_major_0, lmda_minor_0, 
-        cfg.deformable, cfg.dt, cfg.L, cfg.v0, cfg.D, cfg.D_r, cfg.R_0, cfg.tau, cfg.mu,cfg.shape_diff_tol, )
+        integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, noise_sxx, noise_syy, lmda_major_0, lmda_minor_0, 
+        cfg.deformable, cfg.dt, cfg.L, cfg.v0, cfg.D, cfg.D_r, cfg.D_str, cfg.zeta_t, cfg.zeta_r, cfg.R_0, cfg.tau, cfg.mu,  cfg.K, cfg.incom_K, cfg.shape_diff_tol, )
 
         if t % cfg.interval == 0 and save_idx < n_save:
             save_snapshot(save_idx, x, y, theta, lmda_major, lmda_minor, Fx, Fy, sxx, sxy, syx, syy, traj)
@@ -576,8 +616,7 @@ def run_simulation(cfg: SimConfig = CONFIG):
             "cutoff": cutoff,
             "sim_time": cfg.tot_time,
             "dt": cfg.dt,
-            "actual_saved_frames": save_idx,
-        },
+            "actual_saved_frames": save_idx,},
         "x": traj_x[:, :save_idx],
         "y": traj_y[:, :save_idx],
         "orient": traj_theta[:, :save_idx],
@@ -585,14 +624,19 @@ def run_simulation(cfg: SimConfig = CONFIG):
         "l_minor": traj_lmin[:, :save_idx],
         "Fx": traj_Fx[:, :save_idx],
         "Fy": traj_Fy[:, :save_idx],
-        "stresses": traj_stress[:, :, :, :save_idx],
-    }
+        "stresses": traj_stress[:, :, :, :save_idx],}
 
-    stem = f"{cfg.output_prefix}_dt_{cfg.dt}_phi_{cfg.phi:.2f}_v_0{cfg.v0:.2f}_tau{cfg.tau:.2f}_mu_{cfg.mu:.2f}"
+    stem = f"{cfg.output_prefix}_dt_{cfg.dt}_phi_{cfg.phi:.2f}_v0_{cfg.v0:.2f}_tau_{cfg.tau:.2f}_mu_{cfg.mu:.2f}_K_{cfg.K:.2f}_asr_{cfg.aspect_ratio}_deform_{cfg.deformable}"
     if cfg.save_data:
         out_npy = Path(f"{stem}.npy")
         np.save(out_npy, data_ellipses, allow_pickle=True)
         print(f"saved data: {out_npy}")
+    
+    if cfg.save_hdf5:
+        out_hdf = Path(f"{stem}.h5")
+        save_hdf5_output(out_hdf, data_ellipses, cfg)
+        print(f"saved HDF5 data: {out_hdf}")
+
 
     if cfg.make_movie and save_idx > 0:
         out_mp4 = Path(f"{stem}.mp4")
@@ -600,6 +644,91 @@ def run_simulation(cfg: SimConfig = CONFIG):
         print(f"saved movie: {out_mp4}")
 
     return data_ellipses
+
+
+def save_hdf5_output(out_path, data_ellipse, cfg:SimConfig):
+    """
+    Save trajectory output in HDF5 format.
+
+    HDF5 layout:
+
+    /meta/<attribute>          simulation metadata stored as HDF5 attributes
+    /particles/x               shape (N, n_frames)
+    /particles/y               shape (N, n_frames)
+    /particles/orient          shape (N, n_frames)
+    /particles/l_major         shape (N, n_frames)
+    /particles/l_minor         shape (N, n_frames)
+    /forces/Fx                 shape (N, n_frames)
+    /forces/Fy                 shape (N, n_frames)
+    /stresses/tensor           shape (2, 2, N, n_frames)
+    /time/frame                saved frame index: 0, interval, 2*interval, ...
+    /time/t                    physical saved times
+    """
+    
+    if h5py is None:
+        raise ImportError("save_hdf5=True requires h5py")
+    
+    meta_data = data_ellipse["meta"]
+    n_frames = data_ellipse["x"].shape[1]
+    saved_frames = np.arange(n_frames, dtype=np.int64) * int(cfg.interval)
+    saved_times = saved_frames.astype(np.float64) * float(cfg.dt)
+    
+    with h5py.File(out_path, "w") as h5:
+        g_meta = h5.create_group("meta")
+        
+        for key,value in meta_data.items():
+            g_meta.attrs[key] = value
+    
+        g_particles = h5.create_group("particles")
+        g_forces = h5.create_group("forces")
+        g_stresses = h5.create_group("stresses")
+        g_time = h5.create_group("time")
+        
+        g_particles.create_dataset("x", data_ellipse["x"])
+        g_particles.create_dataset("x", data_ellipse["y"])
+        g_particles.create_dataset("orient", data_ellipse["orient"])
+        g_particles.create_dataset("l_minor", data_ellipse["l_minor"])
+        g_particles.create_dataset("l_major", data_ellipse["l_major"])
+
+        g_forces.create_dataset("Fx", data_ellipse["Fx"])
+        g_forces.create_dataset("Fy", data_ellipse["Fy"])
+
+        g_stresses.create_dataset("stresses", data_ellipse["stresses"])
+
+        g_time.create_dataset("frame", data=saved_frames)
+        g_time.create_dataset("t", data=saved_times)
+
+        h5["x"] = g_particles["x"]
+        h5["y"] = g_particles["y"]
+        h5["orient"] = g_particles["orient"]
+        h5["l_major"] = g_particles["l_major"]
+        h5["l_minor"] = g_particles["l_minor"]
+        h5["Fx"] = g_forces["Fx"]
+        h5["Fy"] = g_forces["Fy"]
+        h5["stress_tensor"] = g_stresses["stresses"]
+
+
+def load_hdf5_output(path):
+    """Load the HDF5 output back into the same dictionary style as the .npy output."""
+    if h5py is None:
+        raise ImportError("Loading HDF5 output requires h5py")
+
+    with h5py.File(path, "r") as h5:
+        meta = dict(h5["meta"].attrs)
+        data = {
+            "meta": meta,
+            "x": h5["particles/x"][...],
+            "y": h5["particles/y"][...],
+            "orient": h5["particles/orient"][...],
+            "l_major": h5["particles/l_major"][...],
+            "l_minor": h5["particles/l_minor"][...],
+            "Fx": h5["forces/Fx"][...],
+            "Fy": h5["forces/Fy"][...],
+            "stresses": h5["stresses/tensor"][...],
+            "time": h5["time/t"][...],
+            "frame": h5["time/frame"][...],
+        }
+    return data
 
 
 def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
@@ -618,7 +747,7 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
     n_frames = traj_x.shape[1]
 
     deform_ratio = traj_lmda_major / traj_lmda_minor
-    norm = plt.Normalize(1.0, 1.5)
+    norm = plt.Normalize(cfg.aspect_ratio-0.3, cfg.aspect_ratio+0.3 )
     cmap = LinearSegmentedColormap.from_list("CustomCmap", ["green", "yellow", "red"])
 
     fig = plt.figure(figsize=(7, 7))
@@ -627,6 +756,7 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
     ax.set_ylim(-cfg.L / 2.0, cfg.L / 2.0)
     ax.set_xticks([])
     ax.set_yticks([])
+    ax.set_aspect('equal')
 
     def plot(frame):
         ax.clear()
@@ -635,7 +765,7 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
         ax.set_xticks([])
         ax.set_yticks([])
         ec = EllipseCollection( traj_lmda_major[:, frame] * 2.0, traj_lmda_minor[:, frame] * 2.0, traj_theta[:, frame] / math.pi * 180.0,
-            units="x", offsets=np.array([traj_x[:, frame], traj_y[:, frame]]).T, offset_transform=ax.transData, array=deform_ratio[:, frame], cmap=cmap, norm=norm, )
+            units="xy", offsets=np.array([traj_x[:, frame], traj_y[:, frame]]).T, offset_transform=ax.transData, array=deform_ratio[:, frame], cmap=cmap, norm=norm, )
         ax.add_collection(ec)
         ax.quiver(traj_x[:, frame], traj_y[:, frame], np.cos(traj_theta[:, frame]), np.sin(traj_theta[:, frame]), color="black",)
         ax.text(0.02, 0.97, f"frame {frame}", transform=ax.transAxes, va="top")

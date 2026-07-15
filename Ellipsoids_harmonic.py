@@ -151,7 +151,7 @@ def neighbour_forces_calc(dis_x,dis_y, lmda_major, lmda_minor, dis_abs, u_vecs, 
     for j in neighbours:
         sigma_e_corrected = (lmda_major[i] + lmda_major[j])
         sigma_s_corrected = (lmda_minor[i] + lmda_minor[j]) 
-        chi_corrected = ( (sigma_e_corrected/sigma_s_corrected)**2 - 1)/( (sigma_e_corrected/sigma_s_corrected)**2 +1 )
+        chi_corrected = ( (sigma_e_corrected/sigma_s_corrected)**2 - 1)/( (sigma_e_corrected/sigma_s_corrected)**2 + 1 )
         
         Fx_j, Fy_j, torque_j = calculate_force_torque(dis_x[j], dis_y[j], dis_abs[j], chi_corrected, u_vecs[:,i], u_vecs[:,j])
         fx += Fx_j
