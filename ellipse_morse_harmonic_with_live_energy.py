@@ -22,10 +22,10 @@ except Exception:
 @dataclass
 class SimConfig:
     # ---------------- physical / simulation parameters ----------------
-    phi: float = 0.9
+    phi: float = 1.0
     dt: float = 1.e-3
-    tot_time: float = 100.0
-    L: float = 30.0
+    tot_time: float = 1000.0
+    L: float = 20.0
     v0: float = 0.0
 
     # Can be either "morse" or "harmonic"
@@ -42,8 +42,8 @@ class SimConfig:
     # Deformable-particle parameters
     R_0: float = 1.0
     sigma_0: float = 2.0
-    aspect_ratio: float = 1.25
-    aspect_ratio_init: float = 1.25
+    aspect_ratio: float = 2.5
+    aspect_ratio_init: float = 2.5
     tau: float = 1.0
     mu: float = 1.0
     K: float = 50.0  
@@ -67,7 +67,7 @@ class SimConfig:
     seed: int = 17464
     interval: int = 2000
     num_threads: int = 10
-    frame_interval:int = 5000
+    frame_interval:int = 2000
 
     # Cell-list neighbour cutoff
     neighbour_cutoff_factor: float = 3.0
@@ -151,6 +151,7 @@ def calculate_force_torque_morse_scalar(rx: float, ry: float, r: float, chi: flo
     Fx = 0.0
     Fy = 0.0
     torque = 0.0
+    U_pot = 0.0
 
     if r < 2.0 * sigma:
         exp_term = math.exp(-a_mor * (r - sigma))
@@ -228,7 +229,7 @@ def calculate_force_torque_harmonic_scalar(rx: float, ry: float, r: float, chi: 
 
 @njit(parallel=True)
 def compute_forces_morse_cell_cpu(x, y, cos_theta, sin_theta, lmda_major, lmda_minor, cell_head, cell_next, n_cells: int, L: float, cutoff: float, epsilon: float, a_mor: float, D_mor: float,
-    sigma_0: float, R_0: float, Fx, Fy, torque_mech, sxx, sxy, syx, syy, ):
+    sigma_0: float, R_0: float, Fx, Fy, torque_mech, sxx, sxy, syx, syy, U_potential, ):
     n = x.shape[0]
     cell_size = L / n_cells
     cutoff2 = cutoff * cutoff
@@ -292,7 +293,7 @@ def compute_forces_morse_cell_cpu(x, y, cos_theta, sin_theta, lmda_major, lmda_m
 
 
 @njit(parallel=True)
-def compute_forces_harmonic_cell_cpu(x, y, cos_theta, sin_theta, lmda_major, lmda_minor, cell_head, cell_next, n_cells: int, L: float, cutoff: float, epsilon: float, beta: float, sigma_0: float, R_0: float, Fx, Fy, torque_mech, sxx, sxy, syx, syy, ):
+def compute_forces_harmonic_cell_cpu(x, y, cos_theta, sin_theta, lmda_major, lmda_minor, cell_head, cell_next, n_cells: int, L: float, cutoff: float, epsilon: float, beta: float, sigma_0: float, R_0: float, Fx, Fy, torque_mech, sxx, sxy, syx, syy, U_potential, ):
     n = x.shape[0]
     cell_size = L / n_cells
     cutoff2 = cutoff * cutoff
@@ -547,7 +548,7 @@ def compute_forces_cpu(force_kind: str, cfg: SimConfig, x, y, theta, lmda_major,
         raise ValueError(f"Unknown force_kind={force_kind!r}")
 
 
-def save_snapshot(save_idx, x, y, theta, lmda_major, lmda_minor, Fx, Fy, sxx, sxy, syx, syy, traj, U_potential):
+def save_snapshot(save_idx, x, y, theta, lmda_major, lmda_minor, Fx, Fy, sxx, sxy, syx, syy, traj, traj_u_potential, U_potential):
     traj_x, traj_y, traj_theta, traj_lmaj, traj_lmin, traj_Fx, traj_Fy, traj_stress = traj
     traj_x[:, save_idx] = x
     traj_y[:, save_idx] = y
@@ -628,7 +629,7 @@ def run_simulation(cfg: SimConfig = CONFIG):
         cfg.deformable, cfg.dt, cfg.L, cfg.v0, cfg.D, cfg.D_r, cfg.D_str, cfg.zeta_t, cfg.zeta_r, cfg.R_0, cfg.tau, cfg.mu,  cfg.K, cfg.incom_K, cfg.shape_diff_tol, )
 
         if t % cfg.interval == 0 and save_idx < n_save:
-            save_snapshot(save_idx, x, y, theta, lmda_major, lmda_minor, Fx, Fy, sxx, sxy, syx, syy, traj, U_potential)
+            save_snapshot(save_idx, x, y, theta, lmda_major, lmda_minor, Fx, Fy, sxx, sxy, syx, syy, traj, traj_u_potential, U_potential)
             save_idx += 1
 
     elapsed = time.perf_counter() - t0
@@ -710,10 +711,11 @@ def save_hdf5_output(out_path, data_ellipse, cfg:SimConfig):
         g_particles = h5.create_group("particles")
         g_forces = h5.create_group("forces")
         g_stresses = h5.create_group("stresses")
+        g_energies = h5.create_group("energies")
         g_time = h5.create_group("time")
         
         g_particles.create_dataset("x", data_ellipse["x"])
-        g_particles.create_dataset("x", data_ellipse["y"])
+        g_particles.create_dataset("y", data_ellipse["y"])
         g_particles.create_dataset("orient", data_ellipse["orient"])
         g_particles.create_dataset("l_minor", data_ellipse["l_minor"])
         g_particles.create_dataset("l_major", data_ellipse["l_major"])
@@ -721,7 +723,7 @@ def save_hdf5_output(out_path, data_ellipse, cfg:SimConfig):
         g_forces.create_dataset("Fx", data_ellipse["Fx"])
         g_forces.create_dataset("Fy", data_ellipse["Fy"])
 
-        g_stresses.create_dataset("stresses", data_ellipse["stresses"])
+        g_stresses.create_dataset("tensor", data_ellipse["stresses"])
         g_energies.create_dataset("u_potential", data_ellipse["u_potential"])
         g_energies.create_dataset("u_potential_total", data_ellipse["u_potential"].sum(axis=0))
 
@@ -735,7 +737,7 @@ def save_hdf5_output(out_path, data_ellipse, cfg:SimConfig):
         h5["l_minor"] = g_particles["l_minor"]
         h5["Fx"] = g_forces["Fx"]
         h5["Fy"] = g_forces["Fy"]
-        h5["stresses"] = g_stresses["stresses"]
+        h5["stress_tensor"] = g_stresses["tensor"]
         h5["u_potential"] = g_energies["u_potential"]
         h5["u_potential_total"] = g_energies["u_potential_total"]
 
@@ -764,55 +766,6 @@ def load_hdf5_output(path):
         }
     return data
 
-'''
-def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.animation import FuncAnimation, FFMpegWriter
-    from matplotlib.colors import LinearSegmentedColormap
-    from matplotlib.collections import EllipseCollection
-
-    traj_x = data_ellipses["x"]
-    traj_y = data_ellipses["y"]
-    traj_theta = data_ellipses["orient"]
-    traj_lmda_major = data_ellipses["l_major"]
-    traj_lmda_minor = data_ellipses["l_minor"]
-    traj_u_potential = data_ellipses["u_potential"]	
-    n_frames = traj_x.shape[1]
-    
-    total_u_potential = np.sum(traj_u_potential, axis=0)
-
-    deform_ratio = traj_lmda_major / traj_lmda_minor
-    norm = plt.Normalize(cfg.aspect_ratio-0.5, cfg.aspect_ratio+0.5)
-    cmap = LinearSegmentedColormap.from_list("CustomCmap", ["green", "yellow", "red"])
-
-    fig = plt.figure(figsize=(7, 7))
-    ax = fig.add_axes([0, 0, 1, 1], frameon=False)
-    ax.set_xlim(-cfg.L / 2.0, cfg.L / 2.0)
-    ax.set_ylim(-cfg.L / 2.0, cfg.L / 2.0)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_aspect('equal')
-
-    def plot(frame):
-        ax.clear()
-        ax.set_xlim(-cfg.L / 2.0, cfg.L / 2.0)
-        ax.set_ylim(-cfg.L / 2.0, cfg.L / 2.0)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ec = EllipseCollection( traj_lmda_major[:, frame] * 2.0, traj_lmda_minor[:, frame] * 2.0, traj_theta[:, frame] / math.pi * 180.0,
-            units="xy", offsets=np.array([traj_x[:, frame], traj_y[:, frame]]).T, offset_transform=ax.transData, array=deform_ratio[:, frame], cmap=cmap, norm=norm, )
-        ax.add_collection(ec)
-        ax.quiver(traj_x[:, frame], traj_y[:, frame], np.cos(traj_theta[:, frame]), np.sin(traj_theta[:, frame]), color="black",)
-        ax.text(0.02, 0.97, f"frame {frame}", transform=ax.transAxes, va="top")
-        return (ax,)
-
-    animation = FuncAnimation(fig, plot, frames=n_frames, interval=cfg.frame_interval, blit=False, repeat=False)
-    writer = FFMpegWriter(fps=cfg.movie_fps, codec="libx264", extra_args=["-crf", "23", "-preset", "fast", "-pix_fmt", "yuv420p"],)
-    animation.save(out_mp4, writer=writer, dpi=cfg.movie_dpi)
-    plt.close(fig)
-'''
 
 def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
     import matplotlib
@@ -902,6 +855,8 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
             array=deform_ratio[:, frame],
             cmap=cmap,
             norm=norm,
+            edgecolors="black",
+            linewidths=0.35,
         )
         ax.add_collection(ec)
         ax.quiver(
