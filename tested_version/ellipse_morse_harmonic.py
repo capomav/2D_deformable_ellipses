@@ -24,7 +24,7 @@ class SimConfig:
     # ---------------- physical / simulation parameters ----------------
     phi: float = 0.8
     dt: float = 1.e-3
-    tot_time: float = 100.0
+    tot_time: float = 10.0
     L: float = 20.0
     v0: float = 0.0
 
@@ -680,7 +680,8 @@ def run_simulation(cfg: SimConfig = CONFIG):
 
     if cfg.make_movie and save_idx > 0:
         out_mp4 = Path(f"{stem}.mp4")
-        make_movie(data_ellipses, cfg, out_mp4, plot_pot=cfg.plot_potential)
+        out_snap = Path(f"{stem}.png")
+        make_movie(data_ellipses, cfg, out_mp4, out_snap, plot_pot=cfg.plot_potential)
         print(f"saved movie: {out_mp4}")
 
     return data_ellipses
@@ -777,55 +778,8 @@ def load_hdf5_output(path):
         }
     return data
 
-'''
-def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.animation import FuncAnimation, FFMpegWriter
-    from matplotlib.colors import LinearSegmentedColormap
-    from matplotlib.collections import EllipseCollection
 
-    traj_x = data_ellipses["x"]
-    traj_y = data_ellipses["y"]
-    traj_theta = data_ellipses["orient"]
-    traj_lmda_major = data_ellipses["l_major"]
-    traj_lmda_minor = data_ellipses["l_minor"]
-    n_frames = traj_x.shape[1]
-
-    deform_ratio = traj_lmda_major / traj_lmda_minor
-    norm = plt.Normalize(cfg.aspect_ratio-0.5, cfg.aspect_ratio+0.5)
-    cmap = LinearSegmentedColormap.from_list("CustomCmap", ["green", "yellow", "red"])
-
-    fig = plt.figure(figsize=(7, 7))
-    ax = fig.add_axes([0, 0, 1, 1], frameon=False)
-    ax.set_xlim(-cfg.L / 2.0, cfg.L / 2.0)
-    ax.set_ylim(-cfg.L / 2.0, cfg.L / 2.0)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_aspect('equal')
-
-    def plot(frame):
-        ax.clear()
-        ax.set_xlim(-cfg.L / 2.0, cfg.L / 2.0)
-        ax.set_ylim(-cfg.L / 2.0, cfg.L / 2.0)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ec = EllipseCollection( traj_lmda_major[:, frame] * 2.0, traj_lmda_minor[:, frame] * 2.0, traj_theta[:, frame] / math.pi * 180.0,
-            units="xy", offsets=np.array([traj_x[:, frame], traj_y[:, frame]]).T, offset_transform=ax.transData, array=deform_ratio[:, frame], cmap=cmap, norm=norm, )
-        ax.add_collection(ec)
-        ax.quiver(traj_x[:, frame], traj_y[:, frame], np.cos(traj_theta[:, frame]), np.sin(traj_theta[:, frame]), color="black",)
-        ax.text(0.02, 0.97, f"frame {frame}", transform=ax.transAxes, va="top")
-        return (ax,)
-
-    animation = FuncAnimation(fig, plot, frames=n_frames, interval=cfg.frame_interval, blit=False, repeat=False)
-    writer = FFMpegWriter(fps=cfg.movie_fps, codec="libx264", extra_args=["-crf", "23", "-preset", "fast", "-pix_fmt", "yuv420p"],)
-    animation.save(out_mp4, writer=writer, dpi=cfg.movie_dpi)
-    plt.close(fig)
-    
-
-'''
-def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, plot_pot:bool=False):
+def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, out_snap: Path,  plot_pot:bool=False):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -939,8 +893,13 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, plot_pot:bool=False
             energy_line.set_data(saved_times[: frame + 1],total_u_potential[: frame + 1],)
             current_energy.set_data([current_time],[total_u_potential[frame]],)
 
+            if(frame==n_frames-1):
+                plt.savefig(out_snap, format="png", dpi= 150)
+
             return ax, energy_line, current_energy
-        
+
+        if(frame==n_frames-1):
+            plt.savefig(out_snap, format="png", dpi= 150)
         return ax
 
     animation = FuncAnimation(fig, plot, frames=n_frames, interval=cfg.frame_interval, blit=False,repeat=False,)
