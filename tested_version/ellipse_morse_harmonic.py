@@ -6,6 +6,7 @@ import math
 import time
 import numpy as np
 from numba import njit, prange, set_num_threads
+import argparse
 
 try:
     import tqdm
@@ -16,7 +17,6 @@ try:
     import h5py
 except Exception:
     h5py= None
-
 
 
 @dataclass
@@ -822,7 +822,6 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
     writer = FFMpegWriter(fps=cfg.movie_fps, codec="libx264", extra_args=["-crf", "23", "-preset", "fast", "-pix_fmt", "yuv420p"],)
     animation.save(out_mp4, writer=writer, dpi=cfg.movie_dpi)
     plt.close(fig)
-    
 
 '''
 def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, plot_pot:bool=False):
@@ -950,4 +949,28 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, plot_pot:bool=False
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-potential", type=str, default="harmonic", choices=["harmonic", "morse"], help="Choose from harmonic (just repulsive) or morse (attractive) potential")
+    parser.add_argument("-phi", type=float, default=0.9, help="Packing fraction for the system")
+    parser.add_argument("-L", type=int, default=30, help="Sets the size of the simulation box")
+    parser.add_argument("-v0", type=float, default=0.1, help="Strength of the activity (self-propulsion) of ellipses")
+    parser.add_argument("-tot_time", type=float, default=100, help="Total simulation time (not the number of steps) in simulation units")
+    parser.add_argument("-dt", type=float, default=1e-3, help="time step for the integration")
+    parser.add_argument("-tau", type=float, default=10.0, help="Set the relaxing time scale for the viscoelastic deformation")
+    parser.add_argument("-mu", type=float, default=1.0, help="Set the shear modulus mu for the viscoelastic deformation")
+    parser.add_argument("-K", type=float, default=50.0, help="Set the bulk modulus K for the viscoelastic deformation ")
+    parser.add_argument("-incom_K", type=bool, default=True, help="Makes the particle incompressible by taking K->inf limit")
+    args = parser.parse_args()
+    
+    CONFIG.interaction = args.potential
+    CONFIG.phi = args.phi
+    CONFIG.L = args.L
+    CONFIG.v0 = args.v0
+    CONFIG.tot_time = args.tot_time
+    CONFIG.dt = args.dt
+    CONFIG.tau = args.tau
+    CONFIG.mu = args.mu
+    CONFIG.K = args.K
+    CONFIG.incom_K = args.incom_K 
+    
     run_simulation(CONFIG)
