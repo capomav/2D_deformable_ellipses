@@ -24,7 +24,7 @@ class SimConfig:
     # ---------------- physical / simulation parameters ----------------
     phi: float = 0.8
     dt: float = 1.e-3
-    tot_time: float = 100.0
+    tot_time: float = 10.0
     L: float = 20.0
     v0: float = 0.0
 
@@ -680,7 +680,8 @@ def run_simulation(cfg: SimConfig = CONFIG):
 
     if cfg.make_movie and save_idx > 0:
         out_mp4 = Path(f"{stem}.mp4")
-        make_movie(data_ellipses, cfg, out_mp4, plot_pot=cfg.plot_potential)
+        out_snap = Path(f"{stem}.png")
+        make_movie(data_ellipses, cfg, out_mp4, out_snap, plot_pot=cfg.plot_potential)
         print(f"saved movie: {out_mp4}")
 
     return data_ellipses
@@ -777,15 +778,8 @@ def load_hdf5_output(path):
         }
     return data
 
-'''
-def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.animation import FuncAnimation, FFMpegWriter
-    from matplotlib.colors import LinearSegmentedColormap
-    from matplotlib.collections import EllipseCollection
 
+<<<<<<< HEAD
     traj_x = data_ellipses["x"]
     traj_y = data_ellipses["y"]
     traj_theta = data_ellipses["orient"]
@@ -825,6 +819,9 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path):
 
 '''
 def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, plot_pot:bool=False):
+=======
+def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, out_snap: Path,  plot_pot:bool=False):
+>>>>>>> 5814104714263d45a1f76f0d0b0c0542499e6c22
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -938,8 +935,13 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, plot_pot:bool=False
             energy_line.set_data(saved_times[: frame + 1],total_u_potential[: frame + 1],)
             current_energy.set_data([current_time],[total_u_potential[frame]],)
 
+            if(frame==n_frames-1):
+                plt.savefig(out_snap, format="png", dpi= 150)
+
             return ax, energy_line, current_energy
-        
+
+        if(frame==n_frames-1):
+            plt.savefig(out_snap, format="png", dpi= 150)
         return ax
 
     animation = FuncAnimation(fig, plot, frames=n_frames, interval=cfg.frame_interval, blit=False,repeat=False,)

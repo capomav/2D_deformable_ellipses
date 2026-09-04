@@ -11,7 +11,7 @@ try:
     import tqdm
 except Exception: 
     tqdm = None
-    
+
 try:
     import h5py
 except Exception:
@@ -79,7 +79,6 @@ class SimConfig:
     output_prefix: str = interaction
     movie_fps: int = 25
     movie_dpi: int = 100
-
 
 # Edit this object to change defaults from the command line script.
 CONFIG = SimConfig()
