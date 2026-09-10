@@ -777,9 +777,7 @@ def load_hdf5_output(path):
             "frame": h5["time/frame"][...],
         }
     return data
-
-
-<<<<<<< HEAD
+'''
     traj_x = data_ellipses["x"]
     traj_y = data_ellipses["y"]
     traj_theta = data_ellipses["orient"]
@@ -816,12 +814,11 @@ def load_hdf5_output(path):
     writer = FFMpegWriter(fps=cfg.movie_fps, codec="libx264", extra_args=["-crf", "23", "-preset", "fast", "-pix_fmt", "yuv420p"],)
     animation.save(out_mp4, writer=writer, dpi=cfg.movie_dpi)
     plt.close(fig)
-
 '''
-def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, plot_pot:bool=False):
-=======
+
+#def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, plot_pot:bool=False):
+#=======
 def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, out_snap: Path,  plot_pot:bool=False):
->>>>>>> 5814104714263d45a1f76f0d0b0c0542499e6c22
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
