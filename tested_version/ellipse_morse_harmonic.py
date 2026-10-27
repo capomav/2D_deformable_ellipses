@@ -54,9 +54,17 @@ class SimConfig:
         self.zeta_t: float = 1.0
         self.zeta_r: float = 4*self.R_0**2/3 
         self.zeta_stress: float = 1.0
-        self.D: float = KT/self.zeta_t
-        self.D_r: float = KT/self.zeta_r
-        self.D_str = KT/self.zeta_stress
+
+        @property
+        def set_diffusion(self):
+            if KT > 0:
+                self.D: float = KT/self.zeta_t
+                self.D_r: float = KT/self.zeta_r
+                self.D_str = KT/self.zeta_stress
+            else:
+                self.D: float = 0.0
+                self.D_r: float = 0.01
+                self.D_str:float = 0.0
 
         self.deformable: bool = deformable
         self.deformable_relax: bool = False
