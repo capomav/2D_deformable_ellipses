@@ -19,67 +19,68 @@ except Exception:
     h5py= None
 
 
-@dataclass
+#@dataclass
 class SimConfig:
     # ---------------- physical / simulation parameters ----------------
-    phi: float = 0.8
-    dt: float = 1.e-3
-    tot_time: float = 10.0
-    L: float = 20.0
-    v0: float = 0.0
+    def __init__(self, interaction:str = "morse", deformable:bool = True, aspect_ratio:float = 1.05, KT:float = 0.0):       
+        self.phi: float = 0.8
+        self.dt: float = 1.e-3
+        self.tot_time: float = 10.0
+        self.L: float = 20.0
+        self.v0: float = 0.0
 
-    # Can be either "morse" or "harmonic"
-    interaction:str = "morse"
+        # Can be either "morse" or "harmonic"
+        self.interaction:str = interaction
 
-    # Morse parameters
-    a_mor: float = 2.5
-    D_mor: float = 0.5
+        # Morse parameters
+        self.a_mor: float = 2.5
+        self.D_mor: float = 0.5
 
-    # Harmonic potential parameters
-    epsilon: float = 1.0
-    beta: float = 2.0
+        # Harmonic potential parameters
+        self.epsilon: float = 1.0
+        self.beta: float = 2.0
 
-    # Deformable-particle parameters
-    R_0: float = 1.0
-    sigma_0: float = 2.0
-    aspect_ratio: float = 1.2
-    aspect_ratio_init: float = 1.2
-    tau: float = 10.0
-    mu: float = 1.0
-    K: float = 5.0 
-    incom_K:bool = False
-    
-    KT = 0.003
-    zeta_t: float = 1.0
-    zeta_r: float = 4*R_0**2/3 
-    zeta_stress: float = 1.0
-    D: float = KT/zeta_t
-    D_r: float = KT/zeta_r
-    D_str = KT/zeta_stress
+        # Deformable-particle parameters
+        self.R_0: float = 1.0
+        self.sigma_0: float = 2.0
+        self.aspect_ratio: float = aspect_ratio
+        self.aspect_ratio_init: float = 1.2
+        self.tau: float = 10.0
+        self.mu: float = 1.0
+        self.K: float = 5.0 
+        self.incom_K:bool = False
+        
+        self.KT = KT
+        self.zeta_t: float = 1.0
+        self.zeta_r: float = 4*self.R_0**2/3 
+        self.zeta_stress: float = 1.0
+        self.D: float = KT/self.zeta_t
+        self.D_r: float = KT/self.zeta_r
+        self.D_str = KT/self.zeta_stress
 
-    deformable: bool = False
-    deformable_relax: bool = False
-    dt_relax: float = 0.01
-    relax_steps: int = 10000
-    shape_diff_tol = 1.0e-5
+        self.deformable: bool = deformable
+        self.deformable_relax: bool = False
+        self.dt_relax: float = 0.01
+        self.relax_steps: int = 10000
+        self.shape_diff_tol = 1.0e-5
 
-    # other parameters
-    seed: int = 17464
-    interval: int = 2000
-    num_threads: int = 10
-    frame_interval:int = 2000
+        # other parameters
+        self.seed: int = 17464
+        self.interval: int = 2000
+        self.num_threads: int = 10
+        self.frame_interval:int = 2000
 
-    # Cell-list neighbour cutoff
-    neighbour_cutoff_factor: float = 3.0
+        # Cell-list neighbour cutoff
+        self.neighbour_cutoff_factor: float = 3.0
 
-    # Output controls
-    save_data: bool = True
-    save_hdf5: bool = False
-    make_movie: bool = True
-    plot_potential:bool = False
-    output_prefix: str = interaction
-    movie_fps: int = 25
-    movie_dpi: int = 100
+        # Output controls
+        self.save_data: bool = True
+        self.save_hdf5: bool = False
+        self.make_movie: bool = True
+        self.plot_potential:bool = False
+        self.output_prefix: str = interaction
+        self.movie_fps: int = 25
+        self.movie_dpi: int = 100
 
 
 # Edit this object to change defaults from the command line script.
