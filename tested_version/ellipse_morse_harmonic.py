@@ -22,12 +22,7 @@ except Exception:
 #@dataclass
 class SimConfig:
     # ---------------- physical / simulation parameters ----------------
-    def __init__(self, interaction:str = "morse", deformable:bool = True, aspect_ratio:float = 1.05, KT:float = 0.0):       
-        self.phi: float = 0.8
-        self.dt: float = 1.e-3
-        self.tot_time: float = 10.0
-        self.L: float = 20.0
-        self.v0: float = 0.0
+    def __init__(self, interaction:str = "morse", deformable:bool = True, aspect_ratio:float = 1.05, KT:float = 0.0):
 
         # Can be either "morse" or "harmonic"
         self.interaction:str = interaction
@@ -44,24 +39,20 @@ class SimConfig:
         self.R_0: float = 1.0
         self.sigma_0: float = 2.0
         self.aspect_ratio: float = aspect_ratio
-        self.aspect_ratio_init: float = 1.2
-        self.tau: float = 10.0
-        self.mu: float = 1.0
-        self.K: float = 5.0 
-        self.incom_K:bool = False
+        self.aspect_ratio_init: float = self.aspect_ratio
         
         self.KT = KT
         self.zeta_t: float = 1.0
         self.zeta_r: float = 4*self.R_0**2/3 
         self.zeta_stress: float = 1.0
 
-        if KT > 0:
-            self.D: float = KT/self.zeta_t
-            self.D_r: float = KT/self.zeta_r
-            self.D_str = KT/self.zeta_stress
+        if self.KT > 0.0:
+            self.D: float = self.KT/self.zeta_t
+            self.D_r: float = self.KT/self.zeta_r
+            self.D_str = self.KT/self.zeta_stress
         else:
             self.D: float = 0.0
-            self.D_r: float = 0.01
+            #self.D_r: float = 0.01
             self.D_str:float = 0.0
 
         self.deformable: bool = deformable
@@ -70,39 +61,89 @@ class SimConfig:
         self.relax_steps: int = 10000
         self.shape_diff_tol = 1.0e-5
 
-        # other parameters
-        self.seed: int = 17464
-        self.interval: int = 2000
-        self.num_threads: int = 10
-        self.frame_interval:int = 2000
+        self.frame_interval:int = 200
 
         # Cell-list neighbour cutoff
         self.neighbour_cutoff_factor: float = 3.0
 
-        # Output controls
-        self.save_data: bool = True
-        self.save_hdf5: bool = False
-        self.make_movie: bool = True
-        self.plot_potential:bool = False
-        self.output_prefix: str = interaction
-        self.movie_fps: int = 25
-        self.movie_dpi: int = 100
+    # setting non-default parameters
+    def set_syspar(self,phi: float = 0.6,  L: float = 20):
+        self.phi=phi
+        self.L = L
 
+    def set_runpar(self, num_threads: int = 8, dt: float = 0.005, tot_time: float = 100, interval: int = 2000, seed: int = 17464 ):
+        self.num_threads = num_threads
+        self.interval = interval
+        self.dt = dt
+        self.tot_time = tot_time
+        self.seed = seed	
+        print('Setting simulation to run ')
 
-# Edit this object to change defaults from the command line script.
-CONFIG = SimConfig()
+    def set_actpar(self,v0: float = 0.3, D_r: float = 0.01):
+        self.v0 = v0
+        self.D_r = D_r
+
+    # Deformable-particle parameters
+    def set_defpar(self, tau: float = 10.0, mu: float = 0.5, K: float = 3.0, incom_K:bool = False):
+        self.tau = tau
+        self.mu = mu
+        self.K = K
+        self.incom_K = incom_K
+
+    def get_meta_data(self):
+        dict_data = {
+        "interaction": self.interaction,
+        "a_mor":self.a_mor,
+        "D_mor":self.D_mor,
+        "eps_har":self.epsilon,
+        "beta_har":self.beta,
+        "R_0":self.R_0,
+        "sigma_0":self.sigma_0,
+        "aspect_ratio":self.aspect_ratio,
+        "aspect_ratio_init": self.aspect_ratio_init,
+        "tau":self.tau,
+        "mu":self.mu,
+        "K":self.K,
+        "incom_K":self.incom_K,
+        "KT":self.KT,
+        "zeta_t":self.zeta_t,
+        "zeta_r":self.zeta_r,
+        "zeta_stress":self.zeta_stress,
+        "D":self.D,
+        "D_r":self.D_r,
+        "D_str":self.D_str,
+        "deformable":self.deformable,
+        "deformable_relax":self.deformable_relax,
+        "dt_relax":self.dt_relax,
+        "relax_steps":self.relax_steps,
+        "shape_diff_tol":self.shape_diff_tol,
+        "seed":self.seed,
+        "interval":self.interval,
+        "frame_interval":self.frame_interval,
+        "num_threads":self.num_threads,
+        "neighbour_cutoff_factor":self.neighbour_cutoff_factor,
+        "phi": self.phi,
+        "L": self.L,
+        "v0": self.v0,
+        "tot_time": self.tot_time,
+        "dt":self.dt,
+        }
+
+        return dict_data
+
 
 # Small scalar helpers used by CPU Numba kernels
-
 @njit(inline="always")
 def pbc_delta(dx: float, L: float) -> float:
     """Minimum-image displacement for a square periodic box."""
     return dx - L * np.rint(dx / L)
 
+
 @njit(inline="always")
 def wrap_position(x: float, L: float) -> float:
     """Wrap coordinate to approximately [-L/2, L/2]."""
     return x - L * np.rint(x / L)
+
 
 @njit(inline="always")
 def clamp_cell_index(c: int, n_cells: int) -> int:
@@ -111,6 +152,7 @@ def clamp_cell_index(c: int, n_cells: int) -> int:
     if c >= n_cells:
         return n_cells - 1
     return c
+
 
 @njit(inline="always")
 def particle_cell_indices(xi: float, yi: float, L: float, cell_size: float, n_cells: int):
@@ -370,9 +412,8 @@ def compute_forces_harmonic_cell_cpu(x, y, cos_theta, sin_theta, lmda_major, lmd
 
 
 # State update 
-
 @njit(parallel=True)
-def integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque_mech, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, noise_sxx, noise_syy, lmda_major_0: float, lmda_minor_0: float, deformable: bool,
+def integrate_state_cpu(x, y, vx, vy, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque_mech, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, noise_sxx, noise_syy, lmda_major_0: float, lmda_minor_0: float, deformable: bool,
     dt_step: float, L: float, v0: float, D: float, D_r: float, D_str:float, zeta_t:float, zeta_r:float, R_0: float, tau: float, mu: float, K:float, incom_K: bool, shape_diff_tol:float, ):
     
     n = x.shape[0]
@@ -410,11 +451,6 @@ def integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torqu
             
             sxx[i] += sqrt_2Dstrdt * noise_sxx[i]
             syy[i] += sqrt_2Dstrdt * noise_syy[i]
-
-            #dL00 = -(L00 - L00_0) / tau + R_0 / (4.0 * tau * mu_dynamic) * (sxx[i] - syy[i])
-            #dL11 = -(L11 - L11_0) / tau + R_0 / (4.0 * tau * mu_dynamic) * (syy[i] - sxx[i])
-            #dL01 = -(L01 - L01_0) / tau + R_0 / (2.0 * tau * mu_dynamic) * sxy[i]
-            #dL10 = -(L10 - L10_0) / tau + R_0 / (2.0 * tau * mu_dynamic) * syx[i]
             
             sxx[i] = - sxx[i]
             syy[i] = - syy[i]
@@ -455,7 +491,7 @@ def integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torqu
             #    else:
             #        Ldiff = -tol
 
-            root = math.sqrt(0.25 * Ldiff * Ldiff + L01 * L01)
+            root = math.sqrt(0.25 * Ldiff * Ldiff + L01 * L10)
             lmaj = 0.5 * (L00 + L11) + root
             lmin = 0.5 * (L00 + L11) - root
 
@@ -481,12 +517,14 @@ def integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torqu
         lmda_minor[i] = lmin
         theta[i] = th
 
+        vx[i] = (1/zeta_t)*(v0 * co + Fx[i]) * dt_step + sqrt_2Ddt * noise_x[i]
+        vy[i] = (1/zeta_t)*(v0 * si + Fy[i]) * dt_step + sqrt_2Ddt * noise_y[i]
+
         x[i] = wrap_position(x[i] + (1/zeta_t)*(v0 * co + Fx[i]) * dt_step + sqrt_2Ddt * noise_x[i], L)
         y[i] = wrap_position(y[i] + (1/zeta_t)*(v0 * si + Fy[i]) * dt_step + sqrt_2Ddt * noise_y[i], L)
 
 
 # helper functions
-
 def _progress(iterable, desc: str):
     if tqdm is None:
         return iterable
@@ -500,8 +538,7 @@ def derived_lengths(cfg: SimConfig):
     lmda_minor_0 = sigma_side
     lmda_major_init = cfg.R_0 * math.sqrt(cfg.aspect_ratio_init)
     lmda_minor_init = cfg.R_0 / math.sqrt(cfg.aspect_ratio_init)
-    #lmda_major_init = lmda_major_0 #* cfg.aspect_ratio_init
-    #lmda_minor_init = lmda_minor_0
+
     return lmda_major_0, lmda_minor_0, lmda_major_init, lmda_minor_init
 
 
@@ -532,6 +569,8 @@ def initialize_state(cfg: SimConfig):
 def allocate_work_arrays(N: int):
     Fx = np.empty(N, dtype=np.float64)
     Fy = np.empty(N, dtype=np.float64)
+    vx = np.empty(N, dtype=np.float64)
+    vy = np.empty(N, dtype=np.float64)
     torque = np.empty(N, dtype=np.float64)
     sxx = np.empty(N, dtype=np.float64)
     sxy = np.empty(N, dtype=np.float64)
@@ -540,7 +579,7 @@ def allocate_work_arrays(N: int):
     cos_theta = np.empty(N, dtype=np.float64)
     sin_theta = np.empty(N, dtype=np.float64)
     U_potential = np.empty(N, dtype=np.float64)
-    return Fx, Fy, torque, sxx, sxy, syx, syy, cos_theta, sin_theta, U_potential
+    return Fx, Fy, vx, vy, torque, sxx, sxy, syx, syy, cos_theta, sin_theta, U_potential
 
 
 def choose_cell_count(L: float, cutoff: float) -> int:
@@ -566,10 +605,12 @@ def compute_forces_cpu(force_kind: str, cfg: SimConfig, x, y, theta, lmda_major,
         raise ValueError(f"Unknown force_kind={force_kind!r}")
 
 
-def save_snapshot(save_idx, x, y, theta, lmda_major, lmda_minor, Fx, Fy, sxx, sxy, syx, syy, traj, traj_u_potential, U_potential):
-    traj_x, traj_y, traj_theta, traj_lmaj, traj_lmin, traj_Fx, traj_Fy, traj_stress = traj
+def save_snapshot(save_idx, x, y, vx, vy, theta, lmda_major, lmda_minor, Fx, Fy, sxx, sxy, syx, syy, traj, traj_u_potential, U_potential):
+    traj_x, traj_y, traj_vx, traj_vy, traj_theta, traj_lmaj, traj_lmin, traj_Fx, traj_Fy, traj_stress = traj
     traj_x[:, save_idx] = x
     traj_y[:, save_idx] = y
+    traj_vx[:, save_idx] = vx
+    traj_vy[:, save_idx] = vy
     traj_theta[:, save_idx] = theta
     traj_lmaj[:, save_idx] = lmda_major
     traj_lmin[:, save_idx] = lmda_minor
@@ -582,120 +623,6 @@ def save_snapshot(save_idx, x, y, theta, lmda_major, lmda_minor, Fx, Fy, sxx, sx
     traj_u_potential[:, save_idx] = U_potential
     
 
-def run_simulation(cfg: SimConfig = CONFIG):
-    set_num_threads(cfg.num_threads)
-
-    steps = int(cfg.tot_time / cfg.dt)
-    
-    if steps <= 0:
-        raise ValueError("tot_time/dt must give at least one step")
-    if cfg.interval <= 0:
-        raise ValueError("interval must be positive")
-
-    lmda_major_0, lmda_minor_0, _, _ = derived_lengths(cfg)
-    rng, N, x, y, theta, Lmda, lmda_major, lmda_minor = initialize_state(cfg)
-    print(f"number of particles: {N}")
-
-    cutoff = cfg.neighbour_cutoff_factor * cfg.sigma_0
-    n_cells = choose_cell_count(cfg.L, cutoff)
-    cell_size = cfg.L / n_cells
-    
-    if cell_size < cutoff:
-        raise RuntimeError("cell_size must be >= cutoff for the 3x3 neighbour-cell scan")
-            
-    print(f"CPU cell list: {n_cells} x {n_cells} cells; cell_size={cell_size:.6g}; cutoff={cutoff:.6g}")
-
-    cell_head = np.empty(n_cells * n_cells, dtype=np.int64)
-    cell_next = np.empty(N, dtype=np.int64)
-
-    Fx, Fy, torque, sxx, sxy, syx, syy, cos_theta, sin_theta, U_potential = allocate_work_arrays(N)
-
-    n_save = max(1, steps // cfg.interval)
-    traj_x = np.zeros((N, n_save), dtype=np.float64)
-    traj_y = np.zeros((N, n_save), dtype=np.float64)
-    traj_theta = np.zeros((N, n_save), dtype=np.float64)
-    traj_lmaj = np.zeros((N, n_save), dtype=np.float64)
-    traj_lmin = np.zeros((N, n_save), dtype=np.float64)
-    traj_Fx = np.empty((N, n_save), dtype=np.float64)
-    traj_Fy = np.empty((N, n_save), dtype=np.float64)
-    traj_stress = np.zeros((2, 2, N, n_save), dtype=np.float64)
-    traj = (traj_x, traj_y, traj_theta, traj_lmaj, traj_lmin, traj_Fx, traj_Fy, traj_stress)
-    traj_u_potential = np.zeros((N, n_save), dtype=np.float64)
-
-    t0 = time.perf_counter()
-
-    # Harmonic relaxation stage: same CPU linked-cell force path, with harmonic interaction.
-    for _ in _progress(range(cfg.relax_steps), "relax"):
-        compute_forces_cpu("harmonic", cfg, x, y, theta, lmda_major, lmda_minor, cell_head, cell_next, n_cells, cutoff, Fx, Fy, torque, sxx, sxy, syx, syy, cos_theta, sin_theta, U_potential, )
-        noise_x = rng.normal(0.0, 1.0, N)
-        noise_y = rng.normal(0.0, 1.0, N)
-        noise_sxx = rng.normal(0.0, 1.0, N)
-        noise_syy = rng.normal(0.0, 1.0, N)
-        noise_theta = rng.normal(0.0, 1.0, N)
-        integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, noise_sxx, noise_syy, lmda_major_0, lmda_minor_0, cfg.deformable_relax,
-            cfg.dt_relax, cfg.L, cfg.v0, cfg.D, cfg.D_r, cfg.D_str, cfg.zeta_t, cfg.zeta_r, cfg.R_0, cfg.tau, cfg.mu, cfg.K, cfg.incom_K, cfg.shape_diff_tol,)
-
-    save_idx = 0
-    for t in _progress(range(steps), "run"):
-        
-        compute_forces_cpu(cfg.interaction, cfg, x, y, theta, lmda_major, lmda_minor, cell_head, cell_next, n_cells, cutoff, Fx, Fy, torque, sxx, sxy, syx, syy, cos_theta, sin_theta, U_potential,  )
-
-        noise_x = rng.normal(0.0, 1.0, N)
-        noise_y = rng.normal(0.0, 1.0, N)
-        noise_theta = rng.normal(0.0, 1.0, N)
-        noise_sxx = rng.normal(0.0, 1.0, N)
-        noise_syy = rng.normal(0.0, 1.0, N)
-        integrate_state_cpu(x, y, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, noise_sxx, noise_syy, lmda_major_0, lmda_minor_0, 
-        cfg.deformable, cfg.dt, cfg.L, cfg.v0, cfg.D, cfg.D_r, cfg.D_str, cfg.zeta_t, cfg.zeta_r, cfg.R_0, cfg.tau, cfg.mu,  cfg.K, cfg.incom_K, cfg.shape_diff_tol, )
-
-        if t % cfg.interval == 0 and save_idx < n_save:
-            save_snapshot(save_idx, x, y, theta, lmda_major, lmda_minor, Fx, Fy, sxx, sxy, syx, syy, traj, traj_u_potential, U_potential)
-            save_idx += 1
-
-    elapsed = time.perf_counter() - t0
-    print(f"simulation finished in {elapsed:.3f} s using CPU linked-cell + prange")
-
-    data_ellipses = {
-        "meta": {
-            **vars(cfg),
-            "N": N,
-            "n_cells": n_cells,
-            "cell_size": cell_size,
-            "cutoff": cutoff,
-            "sim_time": cfg.tot_time,
-            "dt": cfg.dt,
-            "actual_saved_frames": save_idx,},
-        "x": traj_x[:, :save_idx],
-        "y": traj_y[:, :save_idx],
-        "orient": traj_theta[:, :save_idx],
-        "l_major": traj_lmaj[:, :save_idx],
-        "l_minor": traj_lmin[:, :save_idx],
-        "Fx": traj_Fx[:, :save_idx],
-        "Fy": traj_Fy[:, :save_idx],
-        "stresses": traj_stress[:, :, :, :save_idx],
-        "u_potential": traj_u_potential[:, :save_idx],}
-
-    stem = f"{cfg.output_prefix}_dt_{cfg.dt}_phi_{cfg.phi:.2f}_v0_{cfg.v0:.2f}_tau_{cfg.tau:.2f}_mu_{cfg.mu:.2f}_K_{cfg.K:.2f}_asr_{cfg.aspect_ratio}_deform_{cfg.deformable}"
-    if cfg.save_data:
-        out_npy = Path(f"{stem}.npy")
-        np.save(out_npy, data_ellipses, allow_pickle=True)
-        print(f"saved data: {out_npy}")
-    
-    if cfg.save_hdf5:
-        out_hdf = Path(f"{stem}.h5")
-        save_hdf5_output(out_hdf, data_ellipses, cfg)
-        print(f"saved HDF5 data: {out_hdf}")
-
-
-    if cfg.make_movie and save_idx > 0:
-        out_mp4 = Path(f"{stem}.mp4")
-        out_snap = Path(f"{stem}.png")
-        make_movie(data_ellipses, cfg, out_mp4, out_snap, plot_pot=cfg.plot_potential)
-        print(f"saved movie: {out_mp4}")
-
-    return data_ellipses
-
-
 def save_hdf5_output(out_path, data_ellipse, cfg:SimConfig):
     '''
     Save trajectory output in HDF5 format.
@@ -705,6 +632,8 @@ def save_hdf5_output(out_path, data_ellipse, cfg:SimConfig):
     /meta/<attribute>          simulation metadata stored as HDF5 attributes
     /particles/x               shape (N, n_frames)
     /particles/y               shape (N, n_frames)
+    /particles/vx               shape (N, n_frames)
+    /particles/vy               shape (N, n_frames)
     /particles/orient          shape (N, n_frames)
     /particles/l_major         shape (N, n_frames)
     /particles/l_minor         shape (N, n_frames)
@@ -737,6 +666,8 @@ def save_hdf5_output(out_path, data_ellipse, cfg:SimConfig):
         
         g_particles.create_dataset("x", data= data_ellipse["x"])
         g_particles.create_dataset("y", data= data_ellipse["y"])
+        g_particles.create_dataset("vx", data= data_ellipse["vx"])
+        g_particles.create_dataset("vy", data= data_ellipse["vy"])
         g_particles.create_dataset("orient", data= data_ellipse["orient"])
         g_particles.create_dataset("l_minor", data= data_ellipse["l_minor"])
         g_particles.create_dataset("l_major", data= data_ellipse["l_major"])
@@ -753,6 +684,8 @@ def save_hdf5_output(out_path, data_ellipse, cfg:SimConfig):
 
         h5["x"] = g_particles["x"]
         h5["y"] = g_particles["y"]
+        h5["vx"] = g_particles["vx"]
+        h5["vy"] = g_particles["vy"]
         h5["orient"] = g_particles["orient"]
         h5["l_major"] = g_particles["l_major"]
         h5["l_minor"] = g_particles["l_minor"]
@@ -762,31 +695,6 @@ def save_hdf5_output(out_path, data_ellipse, cfg:SimConfig):
         h5["u_potential"] = g_energies["u_potential"]
         h5["u_potential_total"] = g_energies["u_potential_total"]
 
-'''
-def load_hdf5_output(path):
-    """Load the HDF5 output back into the same dictionary style as the .npy output."""
-    if h5py is None:
-        raise ImportError("Loading HDF5 output requires h5py")
-
-    with h5py.File(path, "r") as h5:
-        meta = dict(h5["meta"].attrs)
-        data = {
-            "meta": meta,
-            "x": h5["particles/x"][...],
-            "y": h5["particles/y"][...],
-            "orient": h5["particles/orient"][...],
-            "l_major": h5["particles/l_major"][...],
-            "l_minor": h5["particles/l_minor"][...],
-            "Fx": h5["forces/Fx"][...],
-            "Fy": h5["forces/Fy"][...],
-            "stresses": h5["stresses/tensor"][...],
-            "u_potential": h5["energies/u_potential"][...],
-            "u_potential_total": h5["energies/u_potential_total"][...],
-            "time": h5["time/t"][...],
-            "frame": h5["time/frame"][...],
-        }
-    return data
-'''
 
 def load_hdf5_output(path):
     """Load HDF5 output into the same dictionary style as the .npy output."""
@@ -810,6 +718,8 @@ def load_hdf5_output(path):
             "meta": dict(h5["meta"].attrs),
             "x": read_dataset("particles/x"),
             "y": read_dataset("particles/y"),
+            "vx": read_dataset("particles/vx"),
+            "vy": read_dataset("particles/vy"),
             "orient": read_dataset("particles/orient"),
             "l_major": read_dataset("particles/l_major"),
             "l_minor": read_dataset("particles/l_minor"),
@@ -825,15 +735,120 @@ def load_hdf5_output(path):
     return data
 
 
-#def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, plot_pot:bool=False):
-#=======
-def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, out_snap: Path,  plot_pot:bool=False):
+def run_simulation(cfg: SimConfig):
+    set_num_threads(cfg.num_threads)
+
+    steps = int(cfg.tot_time / cfg.dt)
+    
+    if steps <= 0:
+        raise ValueError("tot_time/dt must give at least one step")
+    if cfg.interval <= 0:
+        raise ValueError("interval must be positive")
+
+    lmda_major_0, lmda_minor_0, _, _ = derived_lengths(cfg)
+    rng, N, x, y, theta, Lmda, lmda_major, lmda_minor = initialize_state(cfg)
+    print(f"number of particles: {N}")
+
+    cutoff = cfg.neighbour_cutoff_factor * cfg.sigma_0
+    n_cells = choose_cell_count(cfg.L, cutoff)
+    cell_size = cfg.L / n_cells
+    
+    if cell_size < cutoff:
+        raise RuntimeError("cell_size must be >= cutoff for the 3x3 neighbour-cell scan")
+            
+    print(f"CPU cell list: {n_cells} x {n_cells} cells; cell_size={cell_size:.6g}; cutoff={cutoff:.6g}")
+
+    cell_head = np.empty(n_cells * n_cells, dtype=np.int64)
+    cell_next = np.empty(N, dtype=np.int64)
+
+    Fx, Fy, vx, vy, torque, sxx, sxy, syx, syy, cos_theta, sin_theta, U_potential = allocate_work_arrays(N)
+
+    n_save = max(1, steps // cfg.interval)
+    traj_x = np.zeros((N, n_save), dtype=np.float64)
+    traj_y = np.zeros((N, n_save), dtype=np.float64)
+    traj_vx = np.zeros((N, n_save), dtype=np.float64)
+    traj_vy = np.zeros((N, n_save), dtype=np.float64)
+    traj_theta = np.zeros((N, n_save), dtype=np.float64)
+    traj_lmaj = np.zeros((N, n_save), dtype=np.float64)
+    traj_lmin = np.zeros((N, n_save), dtype=np.float64)
+    traj_Fx = np.empty((N, n_save), dtype=np.float64)
+    traj_Fy = np.empty((N, n_save), dtype=np.float64)
+    traj_stress = np.zeros((2, 2, N, n_save), dtype=np.float64)
+    traj = (traj_x, traj_y, traj_vx, traj_vy, traj_theta, traj_lmaj, traj_lmin, traj_Fx, traj_Fy, traj_stress)
+    traj_u_potential = np.zeros((N, n_save), dtype=np.float64)
+    saved_frames = np.arange(n_save, dtype=np.int64) * int(cfg.interval)
+    saved_times = saved_frames.astype(np.float64) * float(cfg.dt)
+
+    t0 = time.perf_counter()
+
+    # Harmonic relaxation stage: same CPU linked-cell force path, with harmonic interaction.
+    for _ in _progress(range(cfg.relax_steps), "relax"):
+        compute_forces_cpu("harmonic", cfg, x, y, theta, lmda_major, lmda_minor, cell_head, cell_next, n_cells, cutoff, Fx, Fy, torque, sxx, sxy, syx, syy, cos_theta, sin_theta, U_potential, )
+        noise_x = rng.normal(0.0, 1.0, N)
+        noise_y = rng.normal(0.0, 1.0, N)
+        noise_sxx = rng.normal(0.0, 1.0, N)
+        noise_syy = rng.normal(0.0, 1.0, N)
+        noise_theta = rng.normal(0.0, 1.0, N)
+
+        integrate_state_cpu(x, y, vx, vy, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, noise_sxx, noise_syy, lmda_major_0, lmda_minor_0, cfg.deformable_relax,
+            cfg.dt_relax, cfg.L, cfg.v0, cfg.D, cfg.D_r, cfg.D_str, cfg.zeta_t, cfg.zeta_r, cfg.R_0, cfg.tau, cfg.mu, cfg.K, cfg.incom_K, cfg.shape_diff_tol,)
+
+    save_idx = 0
+    for t in _progress(range(steps), "run"):
+        
+        compute_forces_cpu(cfg.interaction, cfg, x, y, theta, lmda_major, lmda_minor, cell_head, cell_next, n_cells, cutoff, Fx, Fy, torque, sxx, sxy, syx, syy, cos_theta, sin_theta, U_potential,  )
+
+        noise_x = rng.normal(0.0, 1.0, N)
+        noise_y = rng.normal(0.0, 1.0, N)
+        noise_theta = rng.normal(0.0, 1.0, N)
+        noise_sxx = rng.normal(0.0, 1.0, N)
+        noise_syy = rng.normal(0.0, 1.0, N)
+
+        integrate_state_cpu(x, y, vx, vy, theta, Lmda, lmda_major, lmda_minor, Fx, Fy, torque, sxx, sxy, syx, syy, noise_x, noise_y, noise_theta, noise_sxx, noise_syy, lmda_major_0, lmda_minor_0, 
+        cfg.deformable, cfg.dt, cfg.L, cfg.v0, cfg.D, cfg.D_r, cfg.D_str, cfg.zeta_t, cfg.zeta_r, cfg.R_0, cfg.tau, cfg.mu,  cfg.K, cfg.incom_K, cfg.shape_diff_tol, )
+        
+        if t % cfg.interval == 0 and save_idx < n_save:
+                    save_snapshot(save_idx, x, y, vx, vy, theta, lmda_major, lmda_minor, Fx, Fy, sxx, sxy, syx, syy, traj, traj_u_potential, U_potential)
+                    save_idx += 1
+
+    elapsed = time.perf_counter() - t0
+    print(f"simulation finished in {elapsed:.3f} s using CPU linked-cell + prange")
+
+    meta_data_running =  {
+                "N": N,
+                "n_cells": n_cells,
+                "cell_size": cell_size,
+                "cutoff": cutoff,
+                "sim_time": cfg.tot_time,
+                "dt": cfg.dt,
+                "actual_saved_frames": save_idx}
+    
+    trajectory_ellipses = {
+        "x": traj_x[:, :save_idx],
+        "y": traj_y[:, :save_idx],
+        "vx": traj_vx[:, :save_idx],
+        "vy": traj_vy[:, :save_idx],
+        "orient": traj_theta[:, :save_idx],
+        "l_major": traj_lmaj[:, :save_idx],
+        "l_minor": traj_lmin[:, :save_idx],
+        "Fx": traj_Fx[:, :save_idx],
+        "Fy": traj_Fy[:, :save_idx],
+        "stresses": traj_stress[:, :, :, :save_idx],
+        "u_potential": traj_u_potential[:, :save_idx],
+        "frames": saved_frames,
+        "time":saved_times}
+
+    return meta_data_running, trajectory_ellipses
+
+# movie making function
+def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, out_snap: Path, movie_fps, movie_dpi, color_scheme: str = "viridis", make_trails:bool = False, plot_pot:bool=False):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation, FFMpegWriter
     from matplotlib.colors import LinearSegmentedColormap
     from matplotlib.collections import EllipseCollection
+    from matplotlib.colors import Normalize
 
     traj_x = data_ellipses["x"]
     traj_y = data_ellipses["y"]
@@ -844,9 +859,7 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, out_snap: Path,  pl
     n_frames = traj_x.shape[1]
 
     if traj_u_potential.shape != traj_x.shape:
-        raise ValueError(
-            "u_potential must have shape (N, n_frames), matching the position trajectories"
-        )
+        raise ValueError("u_potential must have shape (N, n_frames), matching the position trajectories")
 
     # U_potential already contains the 1/2 pair-counting prefactor, so summing
     # over all particles gives the total potential energy of the system.
@@ -854,10 +867,22 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, out_snap: Path,  pl
     saved_times = np.arange(n_frames, dtype=np.float64) * cfg.interval * cfg.dt
 
     deform_ratio = traj_lmda_major / traj_lmda_minor
-    norm = plt.Normalize(cfg.aspect_ratio - 0.5, cfg.aspect_ratio + 0.5)
-    cmap = LinearSegmentedColormap.from_list(
-        "CustomCmap", ["green", "yellow", "red"]
-    )
+    #norm = Normalize(cfg.aspect_ratio - 0.5, cfg.aspect_ratio + 0.5)
+    #cmap = LinearSegmentedColormap.from_list("CustomCmap", ["green", "yellow", "red"])
+    
+    # Keep the same color limits throughout the movie.
+    norm = Normalize(vmin=cfg.aspect_ratio - 0.5,vmax=cfg.aspect_ratio + 0.5,)
+
+    custom_palettes = {
+    "original": ["green", "yellow", "red"],
+    "teal_gold": ["#264653", "#2a9d8f", "#e9c46a"],
+    "blue_pink": ["#2166ac", "#f7f7f7", "#c51b7d"],
+    "purple_orange": ["#542788", "#f7f7f7", "#e66101"],}
+
+    if color_scheme in custom_palettes:
+        cmap = LinearSegmentedColormap.from_list(color_scheme, custom_palettes[color_scheme])
+    else:
+        cmap = plt.get_cmap(color_scheme)
 
     fig = plt.figure(figsize=(7, 7))
     ax = fig.add_axes((0, 0, 1, 1), frameon=False)
@@ -866,6 +891,27 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, out_snap: Path,  pl
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_aspect("equal")
+    
+    cax = fig.add_axes((0.94, 0.15, 0.018, 0.25))
+
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+
+    cbar = fig.colorbar(sm, cax=cax, orientation="vertical")
+    cbar.set_ticks([
+    cfg.aspect_ratio - 0.5,
+    cfg.aspect_ratio,
+    cfg.aspect_ratio + 0.5,
+    ])
+
+    # Put labels on the left to keep them inside the figure.
+    cbar.ax.yaxis.set_ticks_position("left")
+    cbar.ax.yaxis.set_label_position("left")
+    cbar.set_label("Aspect ratio", fontsize=8)
+    cbar.ax.tick_params(labelsize=7, length=2)
+    cbar.outline.set_linewidth(0.5)
+
+    energy_line = None
+    current_energy = None
 
     if(plot_pot==True):
         # Inset in the upper-right corner. Coordinates are fractions of the figure.
@@ -917,16 +963,38 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, out_snap: Path,  pl
             cmap=cmap,
             norm=norm,
             edgecolors="black",
-            linewidths=0.35,
-        )
+            linewidths=0.35,)
+        
         ax.add_collection(ec)
+
+        if (make_trails):
+        
+            # Shape: (time, particles), including the current frame.
+            x_hist = traj_x[:, :frame + 1].T
+            y_hist = traj_y[:, :frame + 1].T
+
+            # Detect crossings in either direction.
+            crossing = ( (np.abs(np.diff(x_hist, axis=0)) > cfg.L / 2.0) | (np.abs(np.diff(y_hist, axis=0)) > cfg.L / 2.0))
+
+            # Insert a separator between consecutive saved positions.
+            # NaN separators break the line only where a crossing occurred.
+            x_plot = np.full((2 * x_hist.shape[0] - 1, x_hist.shape[1]), np.nan)
+            y_plot = np.full_like(x_plot, np.nan)
+
+            x_plot[::2] = x_hist
+            y_plot[::2] = y_hist
+
+            x_plot[1::2] = np.where(crossing, np.nan, x_hist[:-1])
+            y_plot[1::2] = np.where(crossing, np.nan, y_hist[:-1])
+
+            ax.plot(x_plot, y_plot, color="black", linewidth=0.7, alpha=0.8, zorder=1,)
+        
         ax.quiver(
             traj_x[:, frame],
             traj_y[:, frame],
             np.cos(traj_theta[:, frame]),
             np.sin(traj_theta[:, frame]),
-            color="black",
-        )
+            color="black",)
 
         current_time = saved_times[frame]
         ax.text(
@@ -937,48 +1005,102 @@ def make_movie(data_ellipses, cfg: SimConfig, out_mp4: Path, out_snap: Path,  pl
             va="top",)
         
         if(plot_pot==True):
-            # Display only the energy history available up to this movie frame.
-            energy_line.set_data(saved_times[: frame + 1],total_u_potential[: frame + 1],)
-            current_energy.set_data([current_time],[total_u_potential[frame]],)
+            if energy_line is not None and current_energy is not None:
+                # Display only the energy history available up to this movie frame.
+                energy_line.set_data(saved_times[: frame + 1],total_u_potential[: frame + 1],)
+                current_energy.set_data([current_time],[total_u_potential[frame]],)
 
             if(frame==n_frames-1):
                 plt.savefig(out_snap, format="png", dpi= 150)
-
-            return ax, energy_line, current_energy
+            return ()
+            #return ax, energy_line, current_energy
 
         if(frame==n_frames-1):
             plt.savefig(out_snap, format="png", dpi= 150)
-        return ax
+        return ()
+        #return ax
 
     animation = FuncAnimation(fig, plot, frames=n_frames, interval=cfg.frame_interval, blit=False,repeat=False,)
-    writer = FFMpegWriter(fps=cfg.movie_fps,codec="libx264",extra_args=["-crf", "23", "-preset", "fast", "-pix_fmt", "yuv420p"],)
-    animation.save(out_mp4, writer=writer, dpi=cfg.movie_dpi)
+    writer = FFMpegWriter(fps=movie_fps,codec="libx264",extra_args=["-crf", "23", "-preset", "fast", "-pix_fmt", "yuv420p"],)
+    animation.save(out_mp4, writer=writer, dpi=movie_dpi)
     plt.close(fig)
 
+def parse_bool(value):
+    value = value.lower()
+    if value in ("true", "1", "yes"):
+        return True
+    if value in ("false", "0", "no"):
+        return False
+    raise argparse.ArgumentTypeError("Expected true or false")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-potential", type=str, default="harmonic", choices=["harmonic", "morse"], help="Choose from harmonic (just repulsive) or morse (attractive) potential")
     parser.add_argument("-phi", type=float, default=0.9, help="Packing fraction for the system")
-    parser.add_argument("-L", type=int, default=30, help="Sets the size of the simulation box")
-    parser.add_argument("-v0", type=float, default=0.1, help="Strength of the activity (self-propulsion) of ellipses")
-    parser.add_argument("-tot_time", type=float, default=100, help="Total simulation time (not the number of steps) in simulation units")
-    parser.add_argument("-dt", type=float, default=1e-3, help="time step for the integration")
-    parser.add_argument("-tau", type=float, default=10.0, help="Set the relaxing time scale for the viscoelastic deformation")
-    parser.add_argument("-mu", type=float, default=1.0, help="Set the shear modulus mu for the viscoelastic deformation")
-    parser.add_argument("-K", type=float, default=50.0, help="Set the bulk modulus K for the viscoelastic deformation ")
-    parser.add_argument("-incom_K", type=bool, default=True, help="Makes the particle incompressible by taking K->inf limit")
+    parser.add_argument("-L", type=int, default=80, help="Sets the size of the simulation box")
+    parser.add_argument("-v0", type=float, default=0.05, help="Strength of the activity (self-propulsion) of ellipses")
+    parser.add_argument("-Dr", type=float, default=0.01, help="Rotational diffusion coefficient")
+    parser.add_argument("-tot_time", type=float, default=500, help="Total simulation time (not the number of steps) in simulation units")
+    parser.add_argument("-dt", type=float, default=5e-3, help="time step for the integration")
+    parser.add_argument("-tau", type=float, default=2.0, help="Set the relaxing time scale for the viscoelastic deformation")
+    parser.add_argument("-mu", type=float, default=0.2, help="Set the shear modulus mu for the viscoelastic deformation")
+    parser.add_argument("-K", type=float, default=3.0, help="Set the bulk modulus K for the viscoelastic deformation ")
+    parser.add_argument("-incom_K", type=parse_bool, default=False, help="Makes the particle incompressible by taking K->inf limit")
+    parser.add_argument("-aspect_ratio", type=float, default=1.5, help="Sets the target aspect ratio for the ellipses")
+    parser.add_argument("-save_data", type=parse_bool, default=True, help="Boolean to save data in npy format")
+    parser.add_argument("-save_hdf5", type=bool, default=True, help="Boolean to save data in hdf5 format")
+    parser.add_argument("-make_movie", type=parse_bool, default=True, help="Boolean to make output movie in mp4 format")
+    parser.add_argument("-plot_pot", type=parse_bool, default=False, help="Boolean to plot potential energy in output movie/snapshot")
+    parser.add_argument("-movie_fps", type=int, default=25, help="Output movie's frames per sec")
+    parser.add_argument("-movie_dpi", type=int, default=150, help="density per pixel(dpi) for output movie frames")
+    parser.add_argument("-num_threads", type=int, default=15, help="Number of threads for multithreading")
     args = parser.parse_args()
+
+    # Edit this object to change defaults from the command line script.
+    CONFIG = SimConfig(interaction = args.potential, deformable = True, aspect_ratio = args.aspect_ratio, KT = 0.0)
+
+    ## Set its various parameters:
+    # packing fraction and system size
+    CONFIG.set_syspar(phi = args.phi, L= args.L)
+    # activity
+    CONFIG.set_actpar(v0 = args.v0, D_r = args.Dr)
+    # Deformable-particle parameters
+    CONFIG.set_defpar(tau = args.tau, mu = args.mu ,K = args.K, incom_K = args.incom_K)
+    # simulation run
+    CONFIG.set_runpar(num_threads = args.num_threads, dt = args.dt, tot_time = args.tot_time, interval = 200, seed = 12345 )
+
+    meta_data_1 = CONFIG.get_meta_data()
+    meta_data_2, traj_ellipses = run_simulation(CONFIG)
+
+    meta_data = {**meta_data_1, **meta_data_2}
+
+    data_ellipses = {
+        "meta": { **meta_data},
+        **traj_ellipses}
+
+    # Output controls
+    save_data: bool = args.save_data
+    save_hdf5: bool = args.save_hdf5
+    make_out_movie: bool = args.make_movie
+    plot_potential:bool = args.plot_pot
+    output_prefix: str = args.potential
+    movie_fps: int = args.movie_fps
+    movie_dpi: int = args.movie_dpi
+
+    stem = f"{output_prefix}__phi_{CONFIG.phi:.2f}_v0_{CONFIG.v0:.2f}_Dr_{CONFIG.D_r}_tau_{CONFIG.tau:.2f}_mu_{CONFIG.mu:.2f}_K_{CONFIG.K:.2f}_asr_{CONFIG.aspect_ratio}_deform_{CONFIG.deformable}"
+    if save_data:
+        out_npy = Path(f"{stem}.npy")
+        #np.save(out_npy, data_ellipses, allow_pickle=True)
+        np.save(out_npy, np.array(data_ellipses, dtype=object), allow_pickle=True,)
+        print(f"saved data: {out_npy}")
     
-    CONFIG.interaction = args.potential
-    CONFIG.phi = args.phi
-    CONFIG.L = args.L
-    CONFIG.v0 = args.v0
-    CONFIG.tot_time = args.tot_time
-    CONFIG.dt = args.dt
-    CONFIG.tau = args.tau
-    CONFIG.mu = args.mu
-    CONFIG.K = args.K
-    CONFIG.incom_K = args.incom_K 
-    
-    run_simulation(CONFIG)
+    if save_hdf5:
+        out_hdf = Path(f"{stem}.h5")
+        save_hdf5_output(out_hdf, data_ellipses, CONFIG)
+        print(f"saved HDF5 data: {out_hdf}")
+
+    if make_out_movie and traj_ellipses["x"].shape[1]> 0:
+        out_mp4 = Path(f"{stem}.mp4")
+        out_snap = Path(f"{stem}.png")
+        make_movie(traj_ellipses, CONFIG, out_mp4, out_snap, movie_fps, movie_dpi, color_scheme= "original", make_trails = False, plot_pot=plot_potential)
+        print(f"saved movie: {out_mp4}")
